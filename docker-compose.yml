@@ -1,0 +1,76 @@
+services:
+  nats:
+    image: nats:2.12-alpine
+    command: ["--jetstream", "--store_dir=/data", "-m", "8222"]
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    volumes:
+      - nats-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8222/healthz"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  nats-init:
+    image: natsio/nats-box:0.19.0
+    depends_on:
+      nats:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        nats -s nats://nats:4222 stream add EVENTS \
+          --subjects "events.>" \
+          --storage file \
+          --retention limits \
+          --max-msgs 10000 \
+          --max-age 1h \
+          --discard old \
+          --defaults
+        nats -s nats://nats:4222 kv add nutprices --history 5
+        echo "EVENTS stream and nutprices KV bucket ready"
+    restart: "no"
+
+  web:
+    build: ./app
+    depends_on:
+      nats-init:
+        condition: service_completed_successfully
+    environment:
+      APP_ENV: dev
+      NATS_URL: nats://nats:4222
+      NATS_USER: app
+      NATS_PASS: app
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./app:/app
+      - ./Caddyfile:/app/Caddyfile:ro
+    command: ["frankenphp", "run", "--config", "/app/Caddyfile"]
+
+  worker:
+    build: ./app
+    # The worker runs messenger:consume, not a web server, so the FrankenPHP
+    # base image's HTTP healthcheck does not apply — disable it.
+    healthcheck:
+      disable: true
+    depends_on:
+      nats-init:
+        condition: service_completed_successfully
+    environment:
+      APP_ENV: dev
+      NATS_URL: nats://nats:4222
+      NATS_USER: app
+      NATS_PASS: app
+    volumes:
+      - ./app:/app
+    command:
+      - sh
+      - -c
+      - "php bin/console messenger:setup-transports ingest && php bin/console messenger:consume ingest -vv"
+
+volumes:
+  nats-data:

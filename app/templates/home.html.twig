@@ -1,0 +1,52 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Nut Exchange{% endblock %}
+
+{% block stylesheets %}
+<style>
+  body { font-family: system-ui, sans-serif; background: #f5f5f5; display: flex; justify-content: center; padding: 3rem 1rem; }
+  .card { background: #fff; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,.12); padding: 1.5rem 2rem; min-width: 320px; }
+  h1 { margin: 0 0 1rem; font-size: 1.25rem; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { text-align: left; padding: .5rem .75rem; border-bottom: 1px solid #eee; }
+  td.price, td.ts { font-family: ui-monospace, monospace; text-align: right; }
+  @keyframes flash { from { background: #c8f7c5; } to { background: transparent; } }
+  tr.flash { animation: flash .3s ease-out; }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="card">
+  <h1>Nut Exchange</h1>
+  <table id="board">
+    <thead><tr><th>Nut</th><th>Price</th><th>Updated</th></tr></thead>
+    <tbody>
+      {% for nut, p in prices %}
+        <tr data-nut="{{ nut }}">
+          <td>{{ nut }}</td>
+          <td class="price">{{ p.price|number_format(2) }}</td>
+          <td class="ts">{{ p.ts }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<script>
+  const board = document.querySelector('#board tbody');
+  const es = new EventSource('/events?topic=prices');   // ← NUTS
+
+  es.addEventListener('message', (e) => {
+    const { payload } = JSON.parse(e.data);             // {topic, payload, time}
+    let row = board.querySelector(`tr[data-nut="${payload.nut}"]`);
+    if (!row) {                                          // a nut we'd never seen
+      row = board.insertRow();
+      row.dataset.nut = payload.nut;
+      row.innerHTML = `<td>${payload.nut}</td><td class="price"></td><td class="ts"></td>`;
+    }
+    row.querySelector('.price').textContent = payload.price.toFixed(2);
+    row.querySelector('.ts').textContent = payload.ts;
+    row.classList.remove('flash'); void row.offsetWidth; row.classList.add('flash'); // tiny pulse
+  });
+</script>
+{% endblock %}

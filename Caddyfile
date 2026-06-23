@@ -1,0 +1,22 @@
+{
+    order nuts before respond
+    frankenphp
+}
+
+:8080 {
+    # SSE bridge via NUTS
+    route /events* {
+        uri strip_prefix /events
+        nuts {
+            nats_url {$NATS_URL:nats://nats:4222}
+            stream_name {$STREAM_NAME:EVENTS}
+            topic_prefix {$TOPIC_PREFIX:events.}
+            heartbeat_interval 30
+            allowed_origins *
+        }
+    }
+
+    # Symfony application
+    root * /app/public
+    php_server
+}

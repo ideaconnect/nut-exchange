@@ -1,0 +1,11 @@
+framework:
+    messenger:
+        transports:
+            ingest:
+                dsn: '%env(MESSENGER_TRANSPORT_DSN)%'
+                options:
+                    consumer: 'nut-worker'
+                    batching: 1
+                    retry_handler: 'symfony'
+        routing:
+            'App\Message\NutTick': ingest
